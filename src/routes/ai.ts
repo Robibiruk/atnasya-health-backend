@@ -97,44 +97,63 @@ async function getContext(uid: string | undefined): Promise<HealthContext> {
 router.post("/chat", async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
-    console.log(`[AI Chat] Starting request for user ${uid}`);
     const startTime = Date.now();
 
-    const { messages } = req.body as { messages: AIMessage[] };
-    console.log(`[AI Chat] Received ${messages?.length ?? 0} messages`);
+    const { messages } = req.body as { messages?: AIMessage[] };
+    const history: AIMessage[] = (messages ?? []).slice(-10);
+    if (messages && messages.length > 50) {
+        res.status(400).json({ success: false, error: "messages too long" });
+        return;
+      }
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[AI Chat] Starting request for user ${uid}`);
+      console.log(`[AI Chat] Received ${messages?.length ?? 0} messages`);
+    }
 
     const ctxStart = Date.now();
     const ctx = await getContext(uid);
     const ctxTime = Date.now() - ctxStart;
-    console.log(`[AI Chat] getContext took ${ctxTime}ms`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[AI Chat] getContext took ${ctxTime}ms`);
+    }
 
     const promptStart = Date.now();
     const systemPrompt = buildSystemPrompt(ctx);
     const promptTime = Date.now() - promptStart;
-    console.log(
-      `[AI Chat] buildSystemPrompt took ${promptTime}ms, length: ${systemPrompt.length}`,
-    );
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        `[AI Chat] buildSystemPrompt took ${promptTime}ms, length: ${systemPrompt.length}`,
+      );
+    }
 
     const historyStart = Date.now();
-    const history: AIMessage[] = (messages ?? []).slice(-10);
+    const effectiveHistory = history;
     const historyTime = Date.now() - historyStart;
-    console.log(`[AI Chat] history slicing took ${historyTime}ms`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[AI Chat] history slicing took ${historyTime}ms`);
+    }
 
     const aiStart = Date.now();
-    const reply = await callAI(systemPrompt, history);
+    const reply = await callAI(systemPrompt, effectiveHistory);
     const aiTime = Date.now() - aiStart;
-    console.log(`[AI Chat] callAI took ${aiTime}ms`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[AI Chat] callAI took ${aiTime}ms`);
+    }
 
     const totalTime = Date.now() - startTime;
-    console.log(`[AI Chat] Total request time: ${totalTime}ms`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[AI Chat] Total request time: ${totalTime}ms`);
+    }
 
     res.json({ success: true, data: { reply } });
   } catch (err) {
-    console.error("[AI Chat] Error in route:", err);
-    // Return a graceful fallback instead of 500 so the UI never breaks
-    const fallback =
+      if (process.env.NODE_ENV !== "production" && err instanceof Error) {
+      console.error("[AI Chat] Error in route:", err);
+    }
+    const reply =
       "I'm having trouble connecting right now. Please try again in a moment — your health data is safe.";
-    res.json({ success: true, data: { reply: fallback } });
+    res.json({ success: true, data: { reply } });
   }
 });
 

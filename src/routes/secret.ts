@@ -39,7 +39,6 @@ router.post("/messages", async (req: Request, res: Response) => {
       userId: uid,
       sender,
       message,
-      encrypted: true,
     });
     res.status(201).json({ success: true, data: doc });
   } catch (err) {

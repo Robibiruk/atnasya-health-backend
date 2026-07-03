@@ -68,7 +68,17 @@ app.use("/api/symptoms", symptomRoutes);
 app.use("/api/vitals", vitalRoutes);
 app.use("/api/moods", moodRoutes);
 app.use("/api/insights", insightRoutes);
+
+// AI routes with stricter rate limit
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api/ai", aiLimiter);
 app.use("/api/ai", aiRoutes);
+
 app.use("/api/secret", secretRoutes);
 app.use("/api/partner", partnerRoutes);
 app.use("/api/selfcare", selfcareRoutes);

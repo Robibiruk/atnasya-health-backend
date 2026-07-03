@@ -4,13 +4,18 @@ import axios, { AxiosResponse } from "axios";
 import { AIMessage, HealthContext } from "../types";
 
 const OPENGEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
-const OPENGEMINI_API_KEY =
-  process.env.OPENGEMINI_API_KEY ?? "";
+const OPENGEMINI_API_KEY = process.env.OPENGEMINI_API_KEY ?? "";
 const GEMINI_MODEL = "gemini-flash-latest";
 
-const OPERCODE_ZEN_BASE_URL =
-  process.env.OPERCODE_ZEN_BASE_URL ?? "https://api.opencode.ai/v1";
-const OPERCODE_ZEN_API_KEY = process.env.OPERCODE_ZEN_API_KEY ?? "";
+const OPENCODE_ZEN_BASE_URL =
+  process.env.OPENCODE_ZEN_BASE_URL ?? "https://api.opencode.ai/v1";
+const OPENCODE_ZEN_API_KEY = process.env.OPENCODE_ZEN_API_KEY ?? "";
+const OPENCODE_ZEN_MODEL = process.env.MODEL ?? "gpt-4o-mini";
+
+const OPENROUTER_BASE_URL =
+  process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
+const FALLBACK_MODEL = process.env.FALLBACK_MODEL ?? "google/gemini-flash-1.5";
 
 const TIMEOUT_MS = 8000;
 
@@ -144,17 +149,17 @@ async function callOpenCodeZen(
   messages: AIMessage[],
 ): Promise<string> {
   const payload = {
-    model: "zen",
+    model: OPENCODE_ZEN_MODEL,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
     max_tokens: 800,
     temperature: 0.8,
   };
 
-  const res = await fetch(`${OPERCODE_ZEN_BASE_URL}/chat/completions`, {
+  const res = await fetch(`${OPENCODE_ZEN_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPERCODE_ZEN_API_KEY}`,
+      Authorization: `Bearer ${OPENCODE_ZEN_API_KEY}`,
     },
     body: JSON.stringify(payload),
   });
@@ -174,26 +179,64 @@ async function callOpenCodeZen(
   return content;
 }
 
-/**
+async function callOpenRouter(
+  systemPrompt: string,
+  messages: AIMessage[],
+): Promise<string> {
+  const payload = {
+    model: FALLBACK_MODEL,
+    messages: [{ role: "system", content: systemPrompt }, ...messages],
+    max_tokens: 800,
+    temperature: 0.8,
+  };
+
+  const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "HTTP-Referer": "https://atnasya.health",
+      "X-Title": "Atnasya Health",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = (await res.json()) as { error?: { message: string } };
+    throw new Error(
+      `OpenRouter error: ${errorData.error?.message || res.statusText}`,
+    );
+  }
+
+  const data = (await res.json()) as {
+    choices: Array<{ message: { content: string } }>;
+  };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty response from OpenRouter");
+  return content;
+}
+
+/** 
  * Call AI with a system prompt and conversation history.
- * Tries Gemini first; on error/timeout, falls back to OpenCode Zen.
+ * Primary: OpenCode Zen
+ * Fallback: OpenRouter
  */
 export async function callAI(
   systemPrompt: string,
   messages: AIMessage[],
 ): Promise<string> {
   try {
-    return await callGemini(systemPrompt, messages);
-  } catch (geminiErr) {
+    return await callOpenCodeZen(systemPrompt, messages);
+  } catch (zenErr) {
     try {
-      return await callOpenCodeZen(systemPrompt, messages);
-    } catch (zenErr) {
-      const geminiError =
-        geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+      return await callOpenRouter(systemPrompt, messages);
+    } catch (routerErr) {
       const zenError =
         zenErr instanceof Error ? zenErr.message : String(zenErr);
+      const routerError =
+        routerErr instanceof Error ? routerErr.message : String(routerErr);
       throw new Error(
-        `AI request failed. Gemini: ${geminiError} | Fallback: ${zenError}`,
+        `AI request failed. Primary: ${zenError} | Fallback: ${routerError}`,
       );
     }
   }

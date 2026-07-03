@@ -21,7 +21,13 @@ export function errorHandler(
     res.status(err.statusCode).json({ success: false, error: err.message });
     return;
   }
-  // eslint-disable-next-line no-console
-  console.error("[error]", err);
+
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (!isProd) {
+    // eslint-disable-next-line no-console
+    console.error("[error]", err);
+  }
+
   res.status(500).json({ success: false, error: "Internal server error" });
 }
