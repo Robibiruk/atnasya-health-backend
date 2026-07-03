@@ -95,82 +95,57 @@ router.post("/", async (req: Request, res: Response) => {
       await unclosedPrev.save();
     }
 
-    // 2. Check for an existing cycle within the EXPECTED window
-    // Use the predicted next period as the expected date, fallback to ±5 days
+    // 2. Purge overlapping cycles using the user's actual cycle data
+    //    Overlap window = max(21, min(35, userAvgCycleLength)) days, so it spans
+    //    the physiological range (most people: 21–35 days) while respecting the
+    //    user's actual rhythm.
+    const userCycles = await Cycle.find({ userId: uid }).sort({ periodStart: -1 }).lean();
+    const userLengths = userCycles
+      .map((c) => c.cycleLength)
+      .filter((l): l is number => typeof l === "number" && l >= 21 && l <= 45);
+    const userAvg = userLengths.length > 0
+      ? Math.round(userLengths.reduce((a, b) => a + b, 0) / userLengths.length)
+      : 28;
+    const overlapDays = Math.min(35, Math.max(21, userAvg));
+
+    const overlapStart = new Date(newStart.getTime() - overlapDays * 86400000);
+    const overlapEnd = new Date(newStart.getTime() + overlapDays * 86400000);
+
+    await Cycle.deleteMany({
+      userId: uid,
+      periodStart: { $gte: overlapStart, $lte: overlapEnd },
+    });
+
+    // 3. Create a fresh cycle entry with the new data
+    const last = await Cycle.findOne({ userId: uid }).sort({ periodStart: -1 });
+    let cycleLength: number | null = null;
+    if (last) {
+      const rawDays = Math.round((newStart.getTime() - new Date(last.periodStart).getTime()) / 86400000);
+      cycleLength = Math.min(45, Math.max(21, rawDays));
+    }
+    const cycle = await Cycle.create({
+      userId: uid,
+      periodStart: newStart,
+      periodEnd: periodEnd ? new Date(periodEnd) : null,
+      cycleLength,
+      notes: notes ?? null,
+    });
+
+    // Detect fluctuation against prediction for the response
     const allCycles = await Cycle.find({ userId: uid }).sort({ periodStart: -1 }).lean();
     const cycleInputs = allCycles.map((c) => ({
       periodStart: c.periodStart,
       periodEnd: c.periodEnd,
       cycleLength: c.cycleLength,
     }));
+    const fluctuation = cycleInputs.length > 0
+      ? detectFluctuation(cycleInputs.slice(0, 6), newStart)
+      : { isFluctuation: false, predictedNextPeriod: null, diffDays: 0, isLate: false, isEarly: false };
 
-    // Detect fluctuation against prediction
-    const fluctuation = detectFluctuation(
-      cycleInputs.length > 0 ? cycleInputs.slice(0, 6) : [],
-      newStart,
-    );
-
-    // Wider overlap window: use predicted range if available, otherwise ±5 days
-    const expectedDate = fluctuation.predictedNextPeriod
-      ? new Date(fluctuation.predictedNextPeriod)
-      : undefined;
-
-    const overlapStart = expectedDate
-      ? new Date(expectedDate.getTime() - 7 * 86400000)
-      : new Date(newStart.getTime() - 5 * 86400000);
-    const overlapEnd = expectedDate
-      ? new Date(expectedDate.getTime() + 7 * 86400000)
-      : new Date(newStart.getTime() + 5 * 86400000);
-
-    const existingCycle = await Cycle.findOne({
-      userId: uid,
-      periodStart: { $gte: overlapStart, $lte: overlapEnd },
-    }).sort({ periodStart: -1 });
-
-    let cycle;
-    if (existingCycle) {
-      // Update existing cycle (correction)
-      const prevStart = existingCycle.periodStart;
-      existingCycle.periodStart = newStart;
-      if (periodEnd !== undefined) {
-        existingCycle.periodEnd = periodEnd ? new Date(periodEnd) : null;
-      }
-      if (notes !== undefined) {
-        existingCycle.notes = notes;
-      }
-      // Recalculate cycleLength from the previous period (if any)
-      const prev = await Cycle.findOne({
-        userId: uid,
-        periodStart: { $lt: prevStart },
-      }).sort({ periodStart: -1 });
-      if (prev) {
-        const rawDays = Math.round((newStart.getTime() - prev.periodStart.getTime()) / 86400000);
-        existingCycle.cycleLength = Math.min(45, Math.max(21, rawDays)); // clamp to physiological range
-      }
-      cycle = await existingCycle.save();
-    } else {
-      // NEW cycle: infer cycle length from prior period
-      const last = await Cycle.findOne({ userId: uid }).sort({
-        periodStart: -1,
-      });
-      let cycleLength: number | null = null;
-      if (last) {
-        const rawDays = Math.round((newStart.getTime() - new Date(last.periodStart).getTime()) / 86400000);
-        cycleLength = Math.min(45, Math.max(21, rawDays)); // clamp
-      }
-      cycle = await Cycle.create({
-        userId: uid,
-        periodStart: newStart,
-        periodEnd: periodEnd ? new Date(periodEnd) : null,
-        cycleLength,
-        notes: notes ?? null,
-      });
-    }
-
-    // 3. Recalculate all cycle lengths for consistency
+    // 4. Recalculate all cycle lengths for consistency
     await recalculateCycleLengths(uid);
 
-    // 4. Return cycle + fluctuation info
+    // 5. Return cycle + fluctuation info
     res.status(201).json({
       success: true,
       data: cycle,
@@ -217,40 +192,39 @@ router.put("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: "Cycle not found" });
       return;
     }
-    // If periodStart was changed, check for nearby cycles that should be merged
+    // If periodStart was changed, purge nearby cycles and recalculate
     if (periodStart !== undefined) {
       const newStart = new Date(periodStart);
-      const nearbyCycle = await Cycle.findOne({
+      // Use same user-aware overlap as POST
+      const allCyclesForAvg = await Cycle.find({ userId: uid, _id: { $ne: cycle._id } }).sort({ periodStart: -1 }).lean();
+      const lengths = allCyclesForAvg
+        .map((c) => c.cycleLength)
+        .filter((l): l is number => typeof l === "number" && l >= 21 && l <= 45);
+      const avg = lengths.length > 0
+        ? Math.round(lengths.reduce((a, b) => a + b, 0) / lengths.length)
+        : 28;
+      const overlapDays = Math.min(35, Math.max(21, avg));
+
+      // Delete any other cycle that falls within the window (including the old one)
+      await Cycle.deleteMany({
         userId: uid,
         _id: { $ne: cycle._id },
         periodStart: {
-          $gte: new Date(newStart.getTime() - 3 * 86400000),
-          $lte: new Date(newStart.getTime() + 3 * 86400000),
+          $gte: new Date(newStart.getTime() - overlapDays * 86400000),
+          $lte: new Date(newStart.getTime() + overlapDays * 86400000),
         },
+      });
+
+      // Recalculate cycleLength from previous cycle for accurate phase derivation
+      const prev = await Cycle.findOne({
+        userId: uid,
+        _id: { $ne: cycle._id },
+        periodStart: { $lt: newStart },
       }).sort({ periodStart: -1 });
-      if (nearbyCycle) {
-        // Merge: keep the earlier start, combine notes, delete the other
-        const mergedStart =
-          nearbyCycle.periodStart < cycle.periodStart
-            ? nearbyCycle.periodStart
-            : cycle.periodStart;
-        const mergedEnd =
-          nearbyCycle.periodEnd && cycle.periodEnd
-            ? nearbyCycle.periodEnd > cycle.periodEnd
-              ? nearbyCycle.periodEnd
-              : cycle.periodEnd
-            : nearbyCycle.periodEnd || cycle.periodEnd;
-        const mergedNotes = [nearbyCycle.notes, cycle.notes]
-          .filter(Boolean)
-          .join("; ");
-        await Cycle.findByIdAndUpdate(nearbyCycle._id, {
-          $set: {
-            periodStart: mergedStart,
-            periodEnd: mergedEnd,
-            notes: mergedNotes,
-          },
-        });
-        await Cycle.findByIdAndDelete(cycle._id);
+      if (prev) {
+        const rawDays = Math.round((newStart.getTime() - prev.periodStart.getTime()) / 86400000);
+        cycle.cycleLength = Math.min(45, Math.max(21, rawDays));
+        await cycle.save();
       }
     }
     // Recalculate all cycle lengths after edit

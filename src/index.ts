@@ -37,7 +37,9 @@ const PORT = Number(process.env.PORT) || 3001;
 app.use(helmet());
 app.use(
   cors({
-    origin: true,
+    origin: process.env.NODE_ENV === "production"
+      ? ["https://ati-health-tracker.firebaseapp.com", "https://atnasya-health.vercel.app", "https://atnasya-health.netlify.app"]
+      : true,
     credentials: true,
   })
 );
