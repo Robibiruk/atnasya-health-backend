@@ -2,10 +2,12 @@
 import { Router, Request, Response } from "express";
 import { verifyToken } from "../middleware/auth";
 import { User } from "../models/User";
+import type { UserDoc } from "../types";
 import { PartnerConnection } from "../models/PartnerConnection";
 import { PartnerMessage } from "../models/PartnerMessage";
 import { Cycle } from "../models/Cycle";
 import { Mood } from "../models/Mood";
+import { PartnerWishlist } from "../models/PartnerWishlist";
 import {
   predictNextCycle,
   getCurrentPhase,
@@ -492,6 +494,134 @@ router.post("/messages/read", verifyToken, async (req: Request, res: Response) =
     res.status(500).json({
       success: false,
       error: err instanceof Error ? err.message : "Failed to mark messages read",
+    });
+  }
+});
+
+// GET /api/partner/wishlist — get owner wishlist for connected partner view
+router.get("/wishlist", verifyToken, async (req: Request, res: Response) => {
+  try {
+    const uid = req.user?.uid;
+    const user = await User.findOne({ firebaseUid: uid }).lean();
+    if (!user) {
+      res.status(404).json({ success: false, error: "User not found" });
+      return;
+    }
+
+    const connection = await PartnerConnection.findOne({
+      $or: [
+        { ownerId: user._id, status: "active" },
+        { partnerId: user._id, status: "active" },
+      ],
+    }).lean();
+
+    if (!connection) {
+      res.status(404).json({ success: false, error: "No active connection" });
+      return;
+    }
+
+    const targetOwnerId = connection.ownerId;
+
+    const doc = await PartnerWishlist.findOne({ ownerId: targetOwnerId }).lean();
+
+    res.json({ success: true, data: { items: doc?.items ?? [] } });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to load wishlist",
+    });
+  }
+});
+
+// POST /api/partner/wishlist — owner/partner add to shared wishlist
+router.post("/wishlist", verifyToken, async (req: Request, res: Response) => {
+  try {
+    const uid = req.user?.uid;
+    const user = await User.findOne({ firebaseUid: uid }).lean();
+    if (!user) {
+      res.status(404).json({ success: false, error: "User not found" });
+      return;
+    }
+
+    const { item } = req.body as { item?: string };
+    if (!item || !item.trim()) {
+      res.status(400).json({ success: false, error: "Item is required" });
+      return;
+    }
+
+    const connection = await PartnerConnection.findOne({
+      $or: [{ ownerId: user._id }, { partnerId: user._id }],
+      status: "active",
+    }).lean();
+
+    if (!connection) {
+      res.status(404).json({ success: false, error: "No active connection" });
+      return;
+    }
+
+    const ownerId = connection.ownerId;
+
+    const doc = await PartnerWishlist.findOneAndUpdate(
+      { ownerId },
+      {
+        $setOnInsert: { connectionId: String(connection._id) },
+        $push: { items: item.trim() },
+      },
+      { new: true, upsert: true }
+    );
+
+    res.json({ success: true, data: { items: doc.items } });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to add wishlist item",
+    });
+  }
+});
+
+// DELETE /api/partner/wishlist/:index — owner or partner removes item by index
+router.delete("/wishlist/:index", verifyToken, async (req: Request, res: Response) => {
+  try {
+    const uid = req.user?.uid;
+    const user = await User.findOne({ firebaseUid: uid }).lean();
+    if (!user) {
+      res.status(404).json({ success: false, error: "User not found" });
+      return;
+    }
+
+    const connection = await PartnerConnection.findOne({
+      $or: [{ ownerId: user._id }, { partnerId: user._id }],
+      status: "active",
+    }).lean();
+
+    if (!connection) {
+      res.status(404).json({ success: false, error: "No active connection" });
+      return;
+    }
+
+    const idx = Number(req.params.index);
+    const doc = await PartnerWishlist.findOne({ ownerId: connection.ownerId });
+
+    if (!doc) {
+      res.status(404).json({ success: false, error: "Wishlist not found" });
+      return;
+    }
+
+    const items = [...doc.items];
+    if (idx < 0 || idx >= items.length) {
+      res.status(400).json({ success: false, error: "Invalid item" });
+      return;
+    }
+
+    items.splice(idx, 1);
+    doc.items = items;
+    await doc.save();
+
+    res.json({ success: true, data: { items: doc.items } });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to remove wishlist item",
     });
   }
 });

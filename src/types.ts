@@ -27,6 +27,7 @@ export interface UserDoc {
     ovulationAlerts: boolean;
     dailyLogReminder: boolean;
   };
+  wishlist: string[];
   createdAt: Date;
   updatedAt: Date;
 }

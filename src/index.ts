@@ -29,6 +29,7 @@ import aiRoutes from "./routes/ai";
 import secretRoutes from "./routes/secret";
 import partnerRoutes from "./routes/partner";
 import selfcareRoutes from "./routes/selfcare";
+import dailyLogRoutes from "./routes/dailyLog";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -82,6 +83,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/secret", secretRoutes);
 app.use("/api/partner", partnerRoutes);
 app.use("/api/selfcare", selfcareRoutes);
+app.use("/api/daily-logs", dailyLogRoutes);
 
 // --- Error handler (last) ---
 app.use(errorHandler);

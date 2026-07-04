@@ -33,6 +33,7 @@ const UserSchema = new Schema<UserDoc>(
       periodReminder: { type: Boolean, default: true },
       dailyTip: { type: Boolean, default: true },
     },
+    wishlist: [{ type: String }],
   },
   { timestamps: true }
 );
