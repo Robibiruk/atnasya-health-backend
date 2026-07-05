@@ -2,6 +2,8 @@
 import { Router, Request, Response } from "express";
 import { DailyLog } from "../models/DailyLog";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { schemas } from "../middleware/validation";
 
 const router = Router();
 router.use(verifyToken);
@@ -40,7 +42,7 @@ router.get("/:date", async (req: Request, res: Response) => {
 });
 
 // POST /api/daily-logs — create or upsert day summary.
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", validate(schemas.dailyLogCreate), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { date, summary, details } = req.body as {
@@ -48,10 +50,7 @@ router.post("/", async (req: Request, res: Response) => {
       summary?: string;
       details?: Record<string, unknown>;
     };
-    if (!date) {
-      res.status(400).json({ success: false, error: "date is required" });
-      return;
-    }
+
     const doc = await DailyLog.findOneAndUpdate(
       { userId: uid, date },
       { $set: { summary: summary ?? "", details: details ?? {} } },
@@ -67,7 +66,7 @@ router.post("/", async (req: Request, res: Response) => {
 });
 
 // PATCH /api/daily-logs/:date — edit day summary/details.
-router.patch("/:date", async (req: Request, res: Response) => {
+router.patch("/:date", validate(schemas.dailyLogPatch), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { date } = req.params;

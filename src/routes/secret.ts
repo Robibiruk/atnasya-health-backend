@@ -2,6 +2,8 @@
 import { Router, Request, Response } from "express";
 import { ChatMessage } from "../models/ChatMessage";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { schemas } from "../middleware/validation";
 
 const router = Router();
 router.use(verifyToken);
@@ -22,7 +24,7 @@ router.get("/messages", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/messages", async (req: Request, res: Response) => {
+router.post("/messages", validate(schemas.secretMessage), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { sender, message } = req.body as {

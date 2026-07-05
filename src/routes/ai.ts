@@ -1,6 +1,8 @@
 // AI routes — POST /chat, POST /analyze
 import { Router, Request, Response } from "express";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { z } from "zod";
 import { callAI, buildSystemPrompt } from "../services/index";
 import { AIMessage, HealthContext } from "../types";
 import { Cycle } from "../models/Cycle";
@@ -94,7 +96,7 @@ async function getContext(uid: string | undefined): Promise<HealthContext> {
 }
 
 // POST /api/ai/chat — health assistant message.
-router.post("/chat", async (req: Request, res: Response) => {
+router.post("/chat", validate(z.object({ messages: z.array(z.any()).max(50).optional() })), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const startTime = Date.now();

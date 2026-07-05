@@ -2,6 +2,8 @@
 import { Router, Request, Response } from "express";
 import { Vital } from "../models/Vital";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { schemas } from "../middleware/validation";
 import { getCurrentPhase } from "../services/index";
 import { Cycle } from "../models/Cycle";
 
@@ -24,7 +26,7 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", validate(schemas.vitalCreate), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { date, bp, bloodSugar, weight } = req.body as {
@@ -33,10 +35,6 @@ router.post("/", async (req: Request, res: Response) => {
       bloodSugar?: { value: number; unit: string; timing: string };
       weight?: { value: number; unit: string };
     };
-    if (!date) {
-      res.status(400).json({ success: false, error: "date is required" });
-      return;
-    }
     const day = new Date(date);
     day.setHours(0, 0, 0, 0);
     const latestCycle = await Cycle.findOne({ userId: uid }).sort({

@@ -3,6 +3,8 @@ import { Router, Request, Response } from "express";
 import { Cycle } from "../models/Cycle";
 import { User } from "../models/User";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { schemas } from "../middleware/validation";
 import {
   predictNextCycle,
   getCurrentPhase,
@@ -64,7 +66,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
 });
 
 // POST /api/cycles — log a new period start with overlap protection + fluctuation detection.
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", validate(schemas.cycleCreate), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { periodStart, periodEnd, notes } = req.body as {
@@ -72,12 +74,7 @@ router.post("/", async (req: Request, res: Response) => {
       periodEnd?: string;
       notes?: string;
     };
-    if (!periodStart) {
-      res
-        .status(400)
-        .json({ success: false, error: "periodStart is required" });
-      return;
-    }
+
     const newStart = new Date(periodStart);
 
     // 1. Auto-close the previous unclosed cycle
@@ -170,7 +167,7 @@ router.post("/", async (req: Request, res: Response) => {
 });
 
 // PUT /api/cycles/:id — update period start/end / notes.
-router.put("/:id", async (req: Request, res: Response) => {
+router.put("/:id", validate(schemas.cyclePatch), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { periodStart, periodEnd, notes } = req.body as {

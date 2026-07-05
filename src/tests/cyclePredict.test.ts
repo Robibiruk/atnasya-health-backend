@@ -27,10 +27,25 @@ function day(n: number): Date {
 export function run(): void {
   console.log("cyclePredict.test");
 
-  // 1. Cycle without a length → returns null (no usable data)
+  // 1. Single cycle without a stored length → returns a 28-day default estimate.
+  const oneNoLen = predictNextCycle([{ periodStart: day(0) }]);
+  assert("Single cycle without history → 28-day default estimate", !!oneNoLen);
+  assert("Single cycle → avgLength 28", oneNoLen?.avgLength === 28);
   assert(
-    "Cycle without a length → returns null",
-    predictNextCycle([{ periodStart: day(0) }]) === null
+    "Single cycle → nextPeriod = first start + 28",
+    oneNoLen?.nextPeriod.toISOString().slice(0, 10) === day(28).toISOString().slice(0, 10)
+  );
+  assert(
+    "Single cycle → ovulationDay = first start + 14",
+    oneNoLen?.ovulationDay.toISOString().slice(0, 10) === day(14).toISOString().slice(0, 10)
+  );
+  assert(
+    "Single cycle → fertile window starts = first start + 9",
+    oneNoLen?.fertileStart.toISOString().slice(0, 10) === day(9).toISOString().slice(0, 10)
+  );
+  assert(
+    "Single cycle → fertile window ends = first start + 15",
+    oneNoLen?.fertileEnd.toISOString().slice(0, 10) === day(15).toISOString().slice(0, 10)
   );
 
   // 2. 3 cycles of 28 days → predicts next period correctly

@@ -2,6 +2,8 @@
 import { Router, Request, Response } from "express";
 import { Mood } from "../models/Mood";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { schemas } from "../middleware/validation";
 
 const router = Router();
 router.use(verifyToken);
@@ -20,7 +22,7 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", validate(schemas.moodCreate), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { date, score, emoji, note } = req.body as {
@@ -29,12 +31,6 @@ router.post("/", async (req: Request, res: Response) => {
       emoji?: string;
       note?: string;
     };
-    if (!date || typeof score !== "number") {
-      res
-        .status(400)
-        .json({ success: false, error: "date and score are required" });
-      return;
-    }
     const day = new Date(date);
     day.setHours(0, 0, 0, 0);
     const doc = await Mood.findOneAndUpdate(

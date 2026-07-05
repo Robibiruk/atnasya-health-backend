@@ -2,12 +2,13 @@
 import { Router, Request, Response } from "express";
 import { Insight } from "../models/Insight";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { schemas } from "../middleware/validation";
 import { runDailyInsights } from "../services/index";
 
 const router = Router();
 router.use(verifyToken);
 
-// GET /api/insights/today — today's insight cards (cached or generate on the fly).
 router.get("/today", async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
@@ -18,7 +19,6 @@ router.get("/today", async (req: Request, res: Response) => {
       date: { $gte: today },
     });
     if (!insight) {
-      // Generate on demand if the cron hasn't run yet today.
       await runDailyInsights();
       insight = await Insight.findOne({
         userId: uid,
@@ -34,8 +34,7 @@ router.get("/today", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/insights/generate — manually trigger generation.
-router.post("/generate", async (req: Request, res: Response) => {
+router.post("/generate", validate(schemas.insightGenerate), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     await runDailyInsights();

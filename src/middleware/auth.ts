@@ -18,15 +18,6 @@ export async function verifyToken(
     return;
   }
 
-  // Dev bypass: when Firebase isn't configured, accept a dev token of the form
-  // "dev:<firebaseUid>" so local development and tests can proceed.
-  if (process.env.ATNASYA_DEV_AUTH === "1" && token.startsWith("dev:")) {
-    const uid = token.slice(4);
-    req.user = { uid, email: `${uid}@dev.local`, name: "Dev User" };
-    next();
-    return;
-  }
-
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     req.user = {

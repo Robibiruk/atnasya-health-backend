@@ -36,11 +36,22 @@ const PORT = Number(process.env.PORT) || 3001;
 
 // --- Middleware ---
 app.use(helmet());
+const allowedOrigins = [
+  "https://atnasya-health.netlify.app",
+  ...(process.env.NODE_ENV !== "production"
+    ? ["http://localhost:5173", "http://localhost:5174"]
+    : []),
+];
+
 app.use(
   cors({
-    origin: process.env.NODE_ENV === "production"
-      ? ["https://ati-health-tracker.firebaseapp.com", "https://atnasya-health.vercel.app", "https://atnasya-health.netlify.app"]
-      : true,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );

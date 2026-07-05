@@ -1,6 +1,8 @@
 // Partner routes — invite, accept, view, settings, revoke.
 import { Router, Request, Response } from "express";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { schemas } from "../middleware/validation";
 import { User } from "../models/User";
 import type { UserDoc } from "../types";
 import { PartnerConnection } from "../models/PartnerConnection";
@@ -18,7 +20,7 @@ import { generateInviteCode, generateEmpathyTip } from "../services/partnerServi
 const router = Router();
 
 // POST /api/partner/invite — owner generates an invite code
-router.post("/invite", verifyToken, async (req: Request, res: Response) => {
+router.post("/invite", verifyToken, validate(schemas.partnerInvite), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const owner = await User.findOne({ firebaseUid: uid });
@@ -76,7 +78,7 @@ router.post("/invite", verifyToken, async (req: Request, res: Response) => {
 });
 
 // POST /api/partner/accept — partner accepts an invite
-router.post("/accept", verifyToken, async (req: Request, res: Response) => {
+router.post("/accept", verifyToken, validate(schemas.partnerAccept), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { inviteCode } = req.body as { inviteCode?: string };
@@ -309,7 +311,7 @@ router.get("/view", verifyToken, async (req: Request, res: Response) => {
 });
 
 // PATCH /api/partner/settings — owner updates share settings
-router.patch("/settings", verifyToken, async (req: Request, res: Response) => {
+router.patch("/settings", verifyToken, validate(schemas.partnerSettings), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { shareLevel, shareMood, shareSymptoms, sharePregnancy } = req.body as {
@@ -401,7 +403,7 @@ router.delete("/revoke", verifyToken, async (req: Request, res: Response) => {
 });
 
 // POST /api/partner/message — partner sends a quick message to the owner
-router.post("/message", verifyToken, async (req: Request, res: Response) => {
+router.post("/message", verifyToken, validate(schemas.partnerMessage), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const partner = await User.findOne({ firebaseUid: uid });
@@ -534,7 +536,7 @@ router.get("/wishlist", verifyToken, async (req: Request, res: Response) => {
 });
 
 // POST /api/partner/wishlist — owner/partner add to shared wishlist
-router.post("/wishlist", verifyToken, async (req: Request, res: Response) => {
+router.post("/wishlist", verifyToken, validate(schemas.partnerWishlist), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const user = await User.findOne({ firebaseUid: uid }).lean();
@@ -543,11 +545,7 @@ router.post("/wishlist", verifyToken, async (req: Request, res: Response) => {
       return;
     }
 
-    const { item } = req.body as { item?: string };
-    if (!item || !item.trim()) {
-      res.status(400).json({ success: false, error: "Item is required" });
-      return;
-    }
+    const { item } = req.body as { item: string };
 
     const connection = await PartnerConnection.findOne({
       $or: [{ ownerId: user._id }, { partnerId: user._id }],
@@ -580,7 +578,7 @@ router.post("/wishlist", verifyToken, async (req: Request, res: Response) => {
 });
 
 // DELETE /api/partner/wishlist/:index — owner or partner removes item by index
-router.delete("/wishlist/:index", verifyToken, async (req: Request, res: Response) => {
+router.delete("/wishlist/:index", verifyToken, validate(schemas.partnerWishlistDelete), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const user = await User.findOne({ firebaseUid: uid }).lean();

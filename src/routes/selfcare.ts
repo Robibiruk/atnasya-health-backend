@@ -2,6 +2,8 @@
 import { Router, Request, Response } from "express";
 import { Selfcare } from "../models/Selfcare";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { schemas } from "../middleware/validation";
 
 const router = Router();
 router.use(verifyToken);
@@ -115,7 +117,7 @@ router.get("/stats", async (req: Request, res: Response) => {
 });
 
 // POST /api/selfcare — create or upsert a daily entry.
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", validate(schemas.selfcareCreate), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { date, mood, water, sleep, energy, notes } = req.body as {
@@ -126,11 +128,6 @@ router.post("/", async (req: Request, res: Response) => {
       energy?: number;
       notes?: string;
     };
-
-    if (!date) {
-      res.status(400).json({ success: false, error: "date is required" });
-      return;
-    }
 
     const day = new Date(date);
     day.setHours(0, 0, 0, 0);

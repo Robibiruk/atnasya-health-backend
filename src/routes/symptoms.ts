@@ -2,6 +2,8 @@
 import { Router, Request, Response } from "express";
 import { Symptom } from "../models/Symptom";
 import { verifyToken } from "../middleware/auth";
+import { validate } from "../middleware/validation";
+import { schemas } from "../middleware/validation";
 import { getCurrentPhase, predictNextCycle } from "../services/index";
 import { Cycle } from "../models/Cycle";
 
@@ -24,20 +26,13 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", validate(schemas.symptomCreate), async (req: Request, res: Response) => {
   try {
     const uid = req.user?.uid;
     const { date, items } = req.body as {
       date: string;
       items: Array<{ name: string; intensity: number }>;
     };
-    if (!date || !Array.isArray(items)) {
-      res.status(400).json({
-        success: false,
-        error: "date and items[] are required",
-      });
-      return;
-    }
     const day = new Date(date);
     day.setHours(0, 0, 0, 0);
     const latestCycle = await Cycle.findOne({ userId: uid }).sort({
