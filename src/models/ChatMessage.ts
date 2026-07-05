@@ -5,6 +5,7 @@ import { ChatMessageDoc } from "../types";
 const ChatMessageSchema = new Schema<ChatMessageDoc>(
   {
     userId: { type: String, required: true, index: true },
+    scope: { type: String, enum: ["ai", "partner", "secret"], default: "ai", index: true },
     sender: {
       type: String,
       enum: ["user", "assistant", "partner"],
@@ -16,7 +17,7 @@ const ChatMessageSchema = new Schema<ChatMessageDoc>(
   { timestamps: { createdAt: true, updatedAt: false } }
 );
 
-ChatMessageSchema.index({ userId: 1, createdAt: -1 });
+ChatMessageSchema.index({ userId: 1, scope: 1, createdAt: -1 });
 
 export const ChatMessage: Model<ChatMessageDoc> =
   mongoose.model<ChatMessageDoc>("ChatMessage", ChatMessageSchema);

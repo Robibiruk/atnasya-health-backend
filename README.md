@@ -11,6 +11,7 @@ This service is offered free of charge, with the goal of keeping health data pri
 - MongoDB / Mongoose
 - Firebase Admin
 - TypeScript
+- Zod request validation
 - node-cron
 - express-rate-limit / helmet / cors / morgan
 
@@ -25,13 +26,13 @@ src/
   node-cron.d.ts
   middleware/
     auth.ts
-    errorHandler.ts
+    validation.ts
   models/
     User.ts
     Cycle.ts
     Mood.ts
     Vital.ts
-    Symptom.ts
+    Symptom.md
     Insight.ts
     Selfcare.ts
     ChatMessage.ts
@@ -59,6 +60,33 @@ src/
     auth.test.ts
     ai.test.ts
 ```
+
+## Cybersecurity & Privacy Notes
+
+- **Secrets never go in the repo.**
+  - `.env` is ignored by version control.
+  - `.env.example` is intentionally incomplete.
+  - If real credentials appear in git history, treat them as compromised and rotate them immediately.
+
+- **Auth is enforced on protected routes.**
+  - Protected endpoints verify Firebase ID tokens.
+  - Unauthenticated requests to protected data return `401 Unauthorized`.
+  - Routes with sensitive outputs/state changes require valid Bearer tokens unless explicitly noted.
+
+- **AI config is not cross-contaminated on purpose.**
+  - Gemini only reads `GEMINI_API_KEY` and `GEMINI_BASE_URL`.
+  - OpenRouter is only used as an explicit fallback after Gemini fails for the same request.
+  - Cross-provider key/URL fallback is intentionally disallowed to prevent silent auth failures.
+
+- **CORS behavior.**
+  - Production only allows the deployed Netlify origin.
+  - Development allows localhost origins; broad dev patterns are never enabled in production.
+  - Credentials mode is enabled; requests must include proper auth headers.
+
+- **Validation & rate limiting.**
+  - Request bodies are validated with Zod schemas.
+  - Express rate-limiting and security headers are enabled at the server level.
+  - Route handlers avoid echoing secrets or raw error stacks in production responses.
 
 ## Configuration
 
@@ -89,7 +117,16 @@ If a value is missing in `.env`, the server reads the fallback from `.env.exampl
 - The backend does not expose config dumps or stack details publicly in production.
 - Services are split into business logic (`services/`), data models (`models/`), route handlers (`routes/`), and shared middleware (`middleware/`).
 
+## Recent Changes
+
+- AI history route now returns paginated data with Zod validation
+- AI chat persists messages per-user under `scope: "ai"`
+- Gemini/OpenRouter fallback hardened; no cross-provider key substitution
+- CORS callback hardened so disallowed origins return `false` instead of `500`
+- Partner prediction field added for frontend calendar colorization
+- Protected route gating consistent across API routes
+
 ## Want to contribute?
 
 Open an issue or PR in the matching repo.  
-This project is maintained by Robel Biruk and built with care for the Atnasya community. Atnasya❤️
+This project is maintained by Robel Biruk and built with care for Atnasya❤️

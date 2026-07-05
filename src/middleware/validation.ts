@@ -81,6 +81,10 @@ export const schemas = {
   }),
   insightGenerate: z.object({}),
   aiChat: z.object({ messages: z.array(z.any()).max(50).optional() }),
+  chatHistoryList: z.object({
+    limit: z.coerce.number().int().positive().max(200).optional(),
+    offset: z.coerce.number().int().nonnegative().max(1000).optional(),
+  }),
   partnerWishlist: z.object({
     item: z.string().min(1, "item is required").max(200, "Item is too long"),
   }),

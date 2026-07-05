@@ -111,6 +111,7 @@ export type ChatSender = "user" | "assistant" | "partner";
 
 export interface ChatMessageDoc {
   userId: string;
+  scope: "ai" | "partner" | "secret";
   sender: ChatSender;
   message: string;
   encrypted: boolean;

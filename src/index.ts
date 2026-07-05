@@ -39,18 +39,30 @@ app.use(helmet());
 const allowedOrigins = [
   "https://atnasya-health.netlify.app",
   ...(process.env.NODE_ENV !== "production"
-    ? ["http://localhost:5173", "http://localhost:5174"]
+    ? ["http://localhost:*", "http://127.0.0.1:*", "http://localhost:5173", "http://localhost:5174"]
     : []),
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) {
         callback(null, true);
-      } else {
-        callback(null, false);
+        return;
       }
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      const isDevLocalhost =
+        process.env.NODE_ENV !== "production" &&
+        (origin.startsWith("http://localhost:") ||
+          origin.startsWith("http://127.0.0.1:"));
+      if (isDevLocalhost) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
     },
     credentials: true,
   })
