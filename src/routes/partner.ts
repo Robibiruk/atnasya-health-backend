@@ -300,6 +300,15 @@ router.get("/view", verifyToken, async (req: Request, res: Response) => {
         shareSymptoms: connection.shareSymptoms,
         sharePregnancy: connection.sharePregnancy,
         acceptedAt: connection.acceptedAt?.toISOString() ?? null,
+        prediction: prediction
+          ? {
+              nextPeriod: prediction.nextPeriod.toISOString().slice(0, 10),
+              fertileStart: prediction.fertileStart.toISOString().slice(0, 10),
+              fertileEnd: prediction.fertileEnd.toISOString().slice(0, 10),
+              ovulationDay: prediction.ovulationDay.toISOString().slice(0, 10),
+              avgLength: prediction.avgLength,
+            }
+          : null,
       },
     });
   } catch (err) {
