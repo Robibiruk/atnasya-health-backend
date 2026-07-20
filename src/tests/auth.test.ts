@@ -52,7 +52,8 @@ export async function run(): Promise<void> {
     assert("Missing header → next not called", !nextCalled);
   }
 
-  // 2. Valid dev token → calls next()
+  // 2. Dev bypass removed → a "dev:" token is no longer accepted.
+  //    With Firebase unconfigured it goes through verifyIdToken and fails → 401.
   {
     const req = mockReq("Bearer dev:test-user-uid");
     const res = mockRes();
@@ -60,8 +61,9 @@ export async function run(): Promise<void> {
     await verifyToken(req, res, () => {
       nextCalled = true;
     });
-    assert("Valid dev token → next called", nextCalled);
-    assert("Valid dev token → req.user attached", req.user?.uid === "test-user-uid");
+    const out = res.captured();
+    assert("Dev token no longer bypasses → 401", out.code === 401);
+    assert("Dev token → next not called", !nextCalled);
   }
 
   // 3. Invalid (non-dev) token → 401 (Firebase not configured, so bogus token fails)

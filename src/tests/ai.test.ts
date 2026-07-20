@@ -1,4 +1,5 @@
 // ai.test.ts — mock AI providers for the aiService fallback behaviour.
+// Architecture: Gemini (primary, via axios.post) → OpenRouter (fallback, via fetch).
 import axios from "axios";
 import { callAI } from "../services/aiService";
 
@@ -15,60 +16,70 @@ function assert(name: string, condition: unknown): void {
   }
 }
 
-// Minimal mock so we don't hit the network.
-const postSpy = jestish_post_spy();
+// --- Gemini mock (axios.post) ---
+let geminiImpl: () => Promise<any> = async () => {
+  throw new Error("gemini not configured");
+};
+(axios as any).post = async (..._args: any[]) => geminiImpl();
+// isAxiosError is referenced inside the service's catch block.
+(axios as any).isAxiosError = () => false;
 
-function jestish_post_spy() {
-  let implementations: Array<() => Promise<any>> = [];
-  const spy = async (..._args: any[]) => {
-    const impl = implementations.shift();
-    if (impl) return impl();
-    return { data: { choices: [{ message: { content: "fallback-ok" } }] } };
+// --- OpenRouter mock (global fetch) ---
+let fetchImpl: () => Promise<any> = async () => {
+  throw new Error("fetch not configured");
+};
+(global as any).fetch = async (..._args: any[]) => fetchImpl();
+
+function geminiOk(text: string) {
+  return {
+    data: { candidates: [{ content: { parts: [{ text }] } }] },
   };
-  (spy as any).setImpls = (fns: Array<() => Promise<any>>) => {
-    implementations = fns;
-  };
-  return spy;
 }
-(axios as any).post = postSpy;
+
+function openRouterOk(content: string) {
+  return {
+    ok: true,
+    statusText: "OK",
+    json: async () => ({ choices: [{ message: { content } }] }),
+  };
+}
+
+function openRouterFail(message: string) {
+  return {
+    ok: false,
+    statusText: message,
+    json: async () => ({ error: { message } }),
+  };
+}
 
 export async function run(): Promise<void> {
   console.log("ai.test");
 
-  // 1. Successful OpenRouter response → returns parsed content
-  (postSpy as any).setImpls([
-    async () => ({
-      data: { choices: [{ message: { content: "hello from gemini" } }] },
-    }),
-  ]);
+  // 1. Successful Gemini response → returns parsed content
+  geminiImpl = async () => geminiOk("hello from gemini");
+  fetchImpl = async () => {
+    throw new Error("fetch should not be called");
+  };
   {
     const reply = await callAI("sys", [{ role: "user", content: "hi" }]);
-    assert("Successful response → returns content", reply === "hello from gemini");
+    assert("Successful Gemini → returns content", reply === "hello from gemini");
   }
 
-  // 2. OpenRouter fails → falls back to OpenCode Zen
-  (postSpy as any).setImpls([
-    async () => {
-      throw new Error("openrouter 500");
-    },
-    async () => ({
-      data: { choices: [{ message: { content: "zen-reply" } }] },
-    }),
-  ]);
+  // 2. Gemini fails → falls back to OpenRouter
+  geminiImpl = async () => {
+    throw new Error("gemini 500");
+  };
+  fetchImpl = async () => openRouterOk("openrouter-reply");
   {
     const reply = await callAI("sys", [{ role: "user", content: "hi" }]);
-    assert("Fallback → returns zen content", reply === "zen-reply");
+    assert("Fallback → returns OpenRouter content", reply === "openrouter-reply");
   }
 
-  // 3. Both fail → throws error with clear message
-  (postSpy as any).setImpls([
-    async () => {
-      throw new Error("openrouter down");
-    },
-    async () => {
-      throw new Error("zen down");
-    },
-  ]);
+  // 3. Both fail → throws error mentioning both providers
+  geminiImpl = async () => {
+    throw new Error("gemini down");
+  };
+  fetchImpl = async () => openRouterFail("openrouter down");
   {
     let threw = false;
     let message = "";
@@ -80,8 +91,8 @@ export async function run(): Promise<void> {
     }
     assert("Both fail → throws", threw);
     assert(
-      "Both fail → message mentions both providers",
-      message.includes("openrouter") && message.includes("zen")
+      "Both fail → message mentions Primary and Fallback",
+      message.includes("Primary") && message.includes("Fallback")
     );
   }
 

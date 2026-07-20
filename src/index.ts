@@ -80,7 +80,11 @@ app.use(
   })
 );
 
-// --- Health check ---
+// --- Root + health check ---
+app.get("/", (_req, res) => {
+  res.json({ success: true, service: "atnasya-health", status: "ok" });
+});
+
 app.get("/health", (_req, res) => {
   res.json({ success: true, data: { status: "ok", service: "atnasya-health" } });
 });
